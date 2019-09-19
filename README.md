@@ -2,11 +2,15 @@
 
 This function sends commands specified in the body of a POST message (either explicitly or referenced by a URL), optionally returning the command output.
 
+Additionally you can tokenize your configuration, so that you can replace those tokens in real time.
+
+Especially useful for configuring Network Virtual Appliances deployed in the public cloud.
+
 ## Deploy to Azure
 
 You can deploy Azure Functions in multiple ways, here what I would consider to be the simplest
 
-1. Fork and clone this repo to your computer
+1. Fork and clone this repository to your computer
 2. Open with with Visual Studio (make sure you fulfill [these prerequisites](https://docs.microsoft.com/en-us/azure/azure-functions/tutorial-vs-code-serverless-python#prerequisites))
 3. Deploy using [these instructions](https://docs.microsoft.com/en-us/azure/azure-functions/tutorial-vs-code-serverless-python#deploy-to-azure-functions)
 

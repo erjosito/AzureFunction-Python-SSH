@@ -52,13 +52,11 @@ class ssh:
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
 
+    # Extracting the parameters out of the JSON body
     try:
         req_body = req.get_json()
     except ValueError:
-        return func.HttpResponse(
-            "Your body does not look to be correct JSON",
-            status_code=400
-        )
+        return func.HttpResponse("Your body does not look to be correct JSON", status_code=400)
     else:
         hostname = req_body.get('hostname')
         username = req_body.get('username')
@@ -72,6 +70,10 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         except:
             prepend_commands = []
         try:
+            append_commands = req_body.get('append_commands')
+        except:
+            append_commands = []
+        try:
             wait_for_output = req_body.get('wait_for_output')
         except:
             wait_for_output = "false"
@@ -84,65 +86,59 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         except:
             translation_dictionary = []
 
-    if hostname and (commands or translation_dictionary):
-        # ssh = paramiko.SSHClient()
-        # ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        # ssh.connect(hostname, username=username, password=password)
-        # function_output=[]
-        # for command in commands:
-        #     logging.info('Executing command: ' + command)
-        #     command_output = []
-        #     try:
-        #         (stdin, stdout, stderr) = ssh.exec_command(command)
-        #         lines=stdout.readlines()
-        #         logging.info('Output received: ' + str(lines))
-        #         for line in lines:
-        #             command_output.append(line)
-        #     except:
-        #         command_output = "error"
-        #     function_output.append({"command": command, "output": command_output})
-        # ssh.close()
+    # Verify that the minimum required arguments have been supplied
+    if hostname and username and password and (commands or translation_dictionary):
 
-        strdata=''
-        fulldata=''
-
+        # If there are no explicit commands, there has to be a URL to a config file
         if not commands:
             try:
                 data = urllib.request.urlopen(commands_file_url).read()
                 text = data.decode('utf-8')
                 commands = text.split('\n')
             except Exception as e:
-                return func.HttpResponse(
-                    "File " + commands_file_url + " could not be downloaded. Error: " + str(e),
-                    status_code=400
-                )
-        
+                # 400: file could not be found
+                return func.HttpResponse("File " + commands_file_url + " could not be downloaded. Error: " + str(e), status_code=400)
+
+        # Check for append/prepend.
+        # One example of prepend commands could be ['config t']
+        # One example of append commands would be ['exit', 'write running-config'] 
         if prepend_commands:
             commands = prepend_commands + commands
+        if append_commands:
+            commands = commands + append_commands
         
+        # Connect to the SSH host
         connection = ssh(hostname, username, password)
         connection.openShell()
+
+        # Issue one command after each other, and pause to read the output if required
         function_output=[]
         for command in commands:
+            # Translate any tokens in the translation dictionary
             for word in translation_dictionary:
                 command = command.replace(word['old'], word['new'])
             logging.info('Executing command: ' + command)
             connection.sendShell(command)
+            # Only pause and read the output if wait_for_output is true.
+            # Otherwise the command output will not be returned
             if wait_for_output == 'true':
+                # 1 second is typically enough. This should probably be parametrized
                 time.sleep(1)
                 fulldata = connection.readOutput()
-                # Split full data in lines
                 fulldata_str = str(fulldata)
+                # The characters in the output probably depend on the SSH host
                 fulldata_str = fulldata_str.replace('\\r', '')
                 fulldata_lines = fulldata_str.split('\\n')
                 logging.info('Output received: ' + fulldata_str)
             else:
                 fulldata_lines=[]
+            # The output will contain the command executed after tokenization, and optionally its output
             function_output.append({"command": command, "output": fulldata_lines})
-            fulldata=''
+        # If we came down to here, it is a 200
         return func.HttpResponse(json.dumps(function_output))
     else:
+        # 400: insufficient parameters passed on
         return func.HttpResponse(
-             "Please pass a hostname on the query string or in the request body",
+             "Please pass a hostname, username and password on the query string or in the request body",
              status_code=400
         )
